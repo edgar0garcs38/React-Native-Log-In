@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
   Image,
   Pressable,
   ScrollView,
@@ -10,8 +9,9 @@ import {
   Text,
   TextInput,
   View,
+  Dimensions,
 } from 'react-native';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { auth } from '../config/firebaseconfig';
@@ -19,20 +19,28 @@ import { auth } from '../config/firebaseconfig';
 const { width } = Dimensions.get('window');
 
 const validationSchema = Yup.object().shape({
+  nombre: Yup.string().min(2, 'Mínimo 2 caracteres').required('Campo obligatorio'),
   email: Yup.string().email('Correo inválido').required('Campo obligatorio'),
   password: Yup.string().min(6, 'Mínimo 6 caracteres').required('Campo obligatorio'),
 });
 
-export default function LoginScreen({ navigation }) {
+export default function RegisterScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
 
   const formik = useFormik({
-    initialValues: { email: '', password: '' },
+    initialValues: { nombre: '', email: '', password: '' },
     validationSchema,
     onSubmit: async (values) => {
       try {
         setLoading(true);
-        await signInWithEmailAndPassword(auth, values.email.trim(), values.password);
+        const credential = await createUserWithEmailAndPassword(
+          auth,
+          values.email.trim(),
+          values.password,
+        );
+        await updateProfile(credential.user, {
+          displayName: values.nombre.trim(),
+        });
         navigation.replace('Perfil');
       } catch (error) {
         Alert.alert('Error', getFirebaseMessage(error.code));
@@ -51,7 +59,18 @@ export default function LoginScreen({ navigation }) {
       />
 
       <View style={styles.card}>
-        <Text style={styles.title}>Iniciar sesión</Text>
+        <Text style={styles.title}>Crear cuenta</Text>
+
+        <TextInput
+          placeholder="Nombre"
+          value={formik.values.nombre}
+          onChangeText={formik.handleChange('nombre')}
+          onBlur={formik.handleBlur('nombre')}
+          style={styles.input}
+        />
+        {formik.touched.nombre && formik.errors.nombre && (
+          <Text style={styles.error}>{formik.errors.nombre}</Text>
+        )}
 
         <TextInput
           placeholder="Correo"
@@ -90,12 +109,12 @@ export default function LoginScreen({ navigation }) {
           {loading ? (
             <ActivityIndicator color="#ffffff" />
           ) : (
-            <Text style={styles.buttonText}>Ingresar</Text>
+            <Text style={styles.buttonText}>Registrarme</Text>
           )}
         </Pressable>
 
-        <Pressable onPress={() => navigation.navigate('Registro')} style={styles.linkButton}>
-          <Text style={styles.linkText}>Crear cuenta</Text>
+        <Pressable onPress={() => navigation.navigate('Ingreso')} style={styles.linkButton}>
+          <Text style={styles.linkText}>Ya tengo una cuenta</Text>
         </Pressable>
       </View>
     </ScrollView>
@@ -103,13 +122,16 @@ export default function LoginScreen({ navigation }) {
 }
 
 function getFirebaseMessage(code) {
-  if (code === 'auth/invalid-credential' || code === 'auth/user-not-found' || code === 'auth/wrong-password') {
-    return 'Correo o contraseña incorrectos.';
+  if (code === 'auth/email-already-in-use') {
+    return 'Este correo ya está registrado.';
   }
   if (code === 'auth/invalid-email') {
     return 'El correo no es válido.';
   }
-  return 'No se pudo iniciar sesión.';
+  if (code === 'auth/weak-password') {
+    return 'La contraseña debe tener al menos 6 caracteres.';
+  }
+  return 'No se pudo crear la cuenta.';
 }
 
 const styles = StyleSheet.create({
